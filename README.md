@@ -68,10 +68,6 @@ Captures a screenshot and uploads it directly to a remote URL. The callback rece
 | `maxWidth`  | `number` | `1920`   | Maximum capture width in pixels                      |
 | `maxHeight` | `number` | `1080`   | Maximum capture height in pixels                     |
 
-Remote uploads include server identity headers by default: `User-Agent`, `X-Screencapture-Server-Name`, `X-Screencapture-Upload-Host`, and `X-Screencapture-Resource`. These expose the FiveM server name and resource name to the upload provider. Set `screencapture_upload_identity_headers false` in your server config to disable them. User-provided `headers` override the defaults.
-
-For servers with unreliable IPv6 connectivity, add `set screencapture_upload_ipv4 true` to `server.cfg` to force IPv4 for remote screenshot and video uploads. The default is `false`, which keeps Node.js address selection. The setting is read for each upload.
-
 ```lua
 exports.screencapture:remoteUpload(source, 'https://api.fivemanage.com/api/v3/file', {
     encoding = 'webp',
@@ -202,8 +198,6 @@ Starts a video recording for a player, uploads the resulting WebM to a remote UR
 | `maxWidth`  | `number` | `1920`        | Maximum capture width in pixels                 |
 | `maxHeight` | `number` | `1080`        | Maximum capture height in pixels                |
 
-Remote video uploads use the same server identity headers and `screencapture_upload_identity_headers` opt-out as screenshot uploads.
-
 ```lua
 local captureId = exports.screencapture:startVideoCaptureUpload(source, 'https://api.fivemanage.com/api/v3/file', {
     duration = 15,
@@ -245,91 +239,6 @@ end)
 
 exports.screencapture:INTERNAL_stopServerCaptureStream(source)
 ```
-
----
-
-## Live streaming
-
-Live streaming publishes one player's game view to Cloudflare Realtime SFU and allows multiple admin-panel viewers to subscribe through `@screencapture/live`. Video does not travel through FiveM latent events. The player always sees a persistent streaming indicator.
-
-Live streaming is capped at 1280x720, 30 FPS, 25 viewers, and 30 minutes. Game-output audio is not exposed by the supported FiveM game-view API, so the current publisher reports `audioAvailable = false` and continues video-only. Microphone capture is never used.
-
-### Service setup
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/itschip/screencapture/tree/main/workers/live)
-
-The button prompts for your Realtime App ID and App Secret. Cloudflare deploys the Worker and automatically provisions its SQLite Durable Object. After it finishes, copy the deployed Worker URL into `screencapture_live_endpoint` as shown below.
-
-For manual deployment:
-
-1. Create a Cloudflare Realtime SFU app and copy its App ID and App Secret.
-2. Configure both credentials as Worker secrets and deploy from the resource root:
-
-```cmd
-pnpm install
-pnpm types:live-worker
-pnpm --filter @screencapture/live-worker exec wrangler secret put CALLS_APP_ID
-pnpm --filter @screencapture/live-worker exec wrangler secret put CALLS_APP_SECRET
-pnpm deploy:live-worker
-```
-
-3. Point the FiveM resource at the deployed HTTPS Worker:
-
-```cfg
-set screencapture_live_endpoint "https://screencapture-live.<account>.workers.dev"
-```
-
-### Server exports
-
-```lua
-local streamId = exports.screencapture:startLiveStream(source, {
-  duration = 900,
-  maxWidth = 1280,
-  maxHeight = 720,
-  frameRate = 30,
-  maxViewers = 25,
-}, function(result)
-  if result.status == 'error' then
-    print(('Live stream failed: %s'):format(result.error))
-    return
-  end
-
-  print(('Live stream %s is ready'):format(result.streamId))
-end)
-```
-
-Issue a short-lived, one-time viewer grant only after your own admin backend has authorized the viewer:
-
-```lua
-exports.screencapture:createLiveStreamViewerToken(streamId, function(grant)
-  if grant.error then
-    print(grant.error)
-    return
-  end
-
-  -- Deliver grant.streamId and grant.viewerToken to the authorized admin.
-end)
-```
-
-Use `stopLiveStream(streamId)`, `isLiveStreamActive(streamId)`, and the server event `screencapture:liveStreamEnded` for lifecycle management. A player cannot record WebM and publish live video simultaneously.
-
-### Browser viewer
-
-```ts
-import { ScreenCaptureViewer } from '@screencapture/live';
-
-const viewer = new ScreenCaptureViewer({
-  endpoint: liveServiceEndpoint,
-  streamId: grant.streamId,
-  viewerToken: grant.viewerToken,
-});
-
-await viewer.connect();
-await viewer.attach(document.querySelector('video')!);
-await viewer.setQuality('auto');
-```
-
-The SDK also exposes `getStats()`, `disconnect()`, and typed `state`, `track`, and `error` listeners. Viewer tokens and owner capabilities must not be placed in URLs or logs. This repository does not provide an admin panel, account system, or creator authentication layer.
 
 ---
 
