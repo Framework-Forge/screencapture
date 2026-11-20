@@ -1,6 +1,6 @@
 fx_version 'bodacious'
 
-version '0.13.0-beta.4'
+version '0.13.2-beta.4'
 
 game "gta5"
 
@@ -24,3 +24,5 @@ protocol 'http'
 -- change this as you like
 images_bps '1000000'
 stream_bps '5000000'
+
+server_script 'server/version.lua'
